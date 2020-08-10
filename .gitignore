@@ -110,3 +110,7 @@ datasets/
 .vscode/
 .idea/
 __MACOSX/
+
+
+# local test script
+localtest*
