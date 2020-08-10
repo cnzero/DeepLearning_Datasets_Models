@@ -5,7 +5,7 @@ import numpy as np
 import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
-import model.mnist_lenet as module_arch
+import model.Models as module_arch
 from parse_config import ConfigParser
 from trainer import Trainer
 
