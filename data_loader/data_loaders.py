@@ -80,10 +80,11 @@ class Fashion_DataLoader(BaseDataLoader):
 
 
 class NinaPro_Dataset(Dataset):
-    def __init__(self, NinaProPath='/home/Disk2T-1/NinaPro/', promoteInfo=True,
+    def __init__(self, data_dir='/home/Disk2T-1/NinaPro/', promoteInfo=True,
                  DB = 1,
-                 repetition=[0,1,2,3,4,5,6,8,9], 
-                 classes, 
+                 train=True,
+                 trainRepeatIndex=[0,1,2,3,4,5,6,8,9], 
+                 classes=list(range(1, 53)), 
                  subject=1,
                  emg_channels=[0,1,2,3],
                  normalize=None,
@@ -97,18 +98,20 @@ class NinaPro_Dataset(Dataset):
             pass
 
         ###---asserting for input parameters
-        #-NinaProPath
-        assert os.path.exists(NinaProPath),\
+        #-data_dir
+        assert os.path.exists(data_dir),\
             print('Something path wrong.')
-        self.NinaProPath = NinaProPath
+        self.data_dir = data_dir
         #-DB
         assert isinstance(DB, int),\
             print('DB should be a int value.')
         self.DB = DB
+        #-train or test dataset return
+        self.train = train
         #-repetition
-        assert isinstance(repetition, list) and set(repetition).issubset(list(range(10+1))),\
+        assert isinstance(trainRepeatIndex, list) and set(trainRepeatIndex).issubset(list(range(10+1))),\
             print('repetition should be list type and is subset of [0,1,2,3,4,5,6,7,8,9,10].')
-        self.repetition = repetition
+        self.trainRepeatIndex = trainRepeatIndex
         #-subject
         assert isinstance(subject, int),\
             print('One No. subject with int type.')
@@ -130,62 +133,125 @@ class NinaPro_Dataset(Dataset):
             print('emg_channels should be list type for channels selection.')
         self.emg_channels=emg_channels
 
+        self.normalize = normalize
+        self.transform = transform
+        self.preprocessing_functions = preprocessing_functions
+        self.augmentation_functions = augmentation_functions
+        self.size_factor = size_factor
+
+
         #-read key values from .mat files from different [DB] and different [subject]
-        if self.DB==1:
-            # Ej, j=1,2,3, from three Experiments to construct a whole dataset
-            # example
-            # '/home/Disk2T-1/NinaPro/DB1mat/Si_A1_Ej.mat', i=1,2,...,27, j=1,2,3
-            for j in range(1, 3+1): 
-                matPath = self.NinaProPath+'DB'+str(self.DB)+'mat/'+'S'+str(self.subject)+'_A1_E'+str(j)+'.mat'
-                mat = io.loadmat(matPath)
-                # get data from mat dictionary
-                if j==1:
-                    # - basic information of this experiment or subject
-                    #-personal
-                    self.gender = mat['gender'] if 'gender' in mat.keys() else None
-                    self.age = mat['age'] if 'age' in mat.keys() else None
-                    self.weight = mat['weight'] if 'weight' in mat.keys() else None
-                    self.height = mat['height'] if 'height' in mat.keys() else None
-                    self.circumference = mat['circumference'] if 'circumference' in mat.keys() else None
-                    self.laterality = mat['laterality'] if 'laterality' in mat.keys() else None
-                    # acquisition systems
-                    self.sensor = mat['sensor'] if 'sensor' in mat.keys() else None
-                    self.frequency = mat['frequency'] if 'frequency' in mat.keys() else None
-                    self.exercise = mat['exercise'] if 'exercise' in mat.keys() else None
-                    self.time = mat['time'] if 'time' in mat.keys() else None
-                    self.daytesting = mat['daytesting'] if 'daytesting' in mat.keys() else None
-                    # - input
-                    assert 'emg' in mat.keys(), \
-                        print("Why no 'emg' data in .mat files?")
-                    self.emg = mat['emg']
-                    self.acc = mat['acc'] if 'acc' in mat.keys() else None
-                    self.gyro = mat['gyro'] if 'gyro' in mat.keys() else None
-                    self.mag = mat['mag'] if 'mag' in mat.keys() else None
-                    self.reobject = mat['reobject'] if 'reobject' in mat.keys() else None
-                    self.glove = mat['glove'] if 'glove' in mat.keys() else None
-                    self.inclin = mat['inclin'] if 'inclin' in mat.keys() else None
+        #---------------!!!Attention!!!-------DB6,DB7, are not considered. 
+        DB_Ej = {1:3, 2:3, 3:3, 4:3, 5:3}
+        for j in range(1, DB_Ej[self.DB]+1):
+            if self.DB==1:
+                matPath = self.data_dir+'DB'+str(self.DB)+'mat/'+'S'+str(self.subject)+'_A1_E'+str(j)+'.mat'
+            elif 2<=self.DB<=5:
+                matPath = self.data_dir+'DB'+str(self.DB)+'mat/'+'S'+str(self.subject)+'_E'+str(j)+'_A1.mat'
+            elif self.DB==6:
+                pass
+            elif self.DB==7:
+                pass
+            elif self.DB==8:
+                pass
+            elif self.DB==9:
+                pass
 
-                    # - output
-                    self.stimulus = mat['stimulus'] if 'stimulus' in mat.keys() else None
-                    self.restimulus = mat['restimulus'] if 'restimulus' in mat.keys() else None
-                    self.repetition = mat['repetition'] if 'repetition' in mat.keys() else None
-                    self.rerepetition = mat['rerepetition'] if 'rerepetition' in mat.keys() else None
-                    self.object = mat['object'] if 'object' in mat.keys() else None
-                    self.reobject = mat['reobject'] if 'reobject' in mat.keys() else None
+            # read data of dictionary from .mat files.
+            mat = io.loadmat(matPath)
+            if j==1:
+                # - basic information of this experiment or subject
+                #-personal
+                self.gender = mat['gender'] if 'gender' in mat.keys() else None
+                self.age = mat['age'] if 'age' in mat.keys() else None
+                self.weight = mat['weight'] if 'weight' in mat.keys() else None
+                self.height = mat['height'] if 'height' in mat.keys() else None
+                self.circumference = mat['circumference'] if 'circumference' in mat.keys() else None
+                self.laterality = mat['laterality'] if 'laterality' in mat.keys() else None
+                # acquisition systems
+                self.sensor = mat['sensor'] if 'sensor' in mat.keys() else None
+                self.frequency = mat['frequency'] if 'frequency' in mat.keys() else None
+                self.exercise = mat['exercise'] if 'exercise' in mat.keys() else None
+                self.time = mat['time'] if 'time' in mat.keys() else None
+                self.daytesting = mat['daytesting'] if 'daytesting' in mat.keys() else None
+                # - input
+                assert 'emg' in mat.keys(), \
+                    print("Why no 'emg' data in .mat files?")
+                self.emg = mat['emg']
+                self.acc = mat['acc'] if 'acc' in mat.keys() else None
+                self.gyro = mat['gyro'] if 'gyro' in mat.keys() else None
+                self.mag = mat['mag'] if 'mag' in mat.keys() else None
 
-                # j=2,3
-                # raw data concat and update gesture labels.
+                # - output
+                self.repetition = mat['repetition'] if 'repetition' in mat.keys() else None
+                self.rerepetition = mat['rerepetition'] if 'rerepetition' in mat.keys() else None
+                self.stimulus = mat['stimulus'] if 'stimulus' in mat.keys() else None
+                self.restimulus = mat['restimulus'] if 'restimulus' in mat.keys() else None
+                self.glove = mat['glove'] if 'glove' in mat.keys() else None
+                self.inclin = mat['inclin'] if 'inclin' in mat.keys() else None
+                self.object = mat['object'] if 'object' in mat.keys() else None
+                self.reobject = mat['reobject'] if 'reobject' in mat.keys() else None
 
-        elif self.DB==2:
-            pass
-        elif 3<=self.DB<=6:
-            pass
-        elif self.DB==7:
-            pass
+            # j=2,3
+            # raw data concat and update gesture labels.
+            else:  # j=2,3, for another experimental data
+                # input
+                assert 'emg' in mat.keys(),\
+                    print("Why no 'emg' data in .mat files?")
+                self.emg = np.vstack((self.emg, mat['emg']))
+                if self.acc is not None:
+                    self.acc = np.vstack((self.acc, mat['acc']))
+                if self.gyro is not None:
+                    self.gyro = np.vstack(self.gyro, mat['gyro'])
+                if self.mag is not None:
+                    self.mag = np.vstack(self.mag, mat['mag'])
 
+                # output, 
+                self.repetition = np.vstack((self.repetition, mat['repetition']))
+                self.rerepetition = np.vstack((self.rerepetition, mat['rerepetition']))
+                # -- update gesture labels
+                lastGestureNums = len(np.unique(self.stimulus))-1
+                stimulus = mat['stimulus']
+                stimulus = stimulus + (stimulus!=0)*lastGestureNums
+                self.stimulus = np.vstack((self.stimulus, stimulus))
+
+
+                restimulus = mat['restimulus']
+                restimulus = restimulus + (restimulus!=0)*lastGestureNums
+                self.restimulus = np.vstack((self.restimulus, restimulus))
+                if self.glove is not None and 'glove' in mat.keys():
+                    self.glove = np.vstack((self.glove, mat['glove']))
+                if self.inclin is not None and 'inclin' in mat.keys():
+                    self.inclin = np.vstack((self.inclin, mat['inclin']))
+                if self.object is not None and 'object' in mat.keys():
+                    self.object = np.vstack((self.object, mat['object']))
+                if self.reobject is not None and 'reobject' in mat.keys():
+                    self.reobject = np.vstack((self.reobject, mat['reobject']))
+
+        # split for different train-test datasets based on [self.trainRepeatIndex]
+        conditionRepeatIndex = np.empty_like(self.rerepetition)
+        if self.train:
+            conditionRepeatIndex = np.any(self.rerepetition==self.trainRepeatIndex, axis=1)
+        else:
+            testRepetitionIndex = []
+            for i in range(10+1):
+                if i not in self.trainRepeatIndex:
+                    testRepetitionIndex.append(i)
+            conditionRepeatIndex = np.any(self.rerepetition==testRepetitionIndex, axis=1)
+        conditionRepeatIndex = conditionRepeatIndex.reshape((-1, 1)) 
+        
+        # - type-1 raw instaneous data
+        conditionNotRest = self.restimulus!=0
+        conditions = conditionRepeatIndex * conditionNotRest
+        self.Xs =        self.emg[conditions[:, 0], :] # N x N_channels
+        self.Ys = self.restimulus[conditions[:, 0], :] # (N, )
+
+        # for instantaneous
+        self.Xs = np.reshape(self.Xs, (self.Xs.shape[0], 1, self.Xs.shape[1]))
+        self.Ys = self.Ys.squeeze(1)-1
 
     def __getitem__(self, index):
-        xs, ys = self.Xs[index], self.Ys[index]
+        xs, ys = self.Xs[index, :], self.Ys[index]
         if self.transform is not None:
             xs = self.transform(xs)
         return xs, ys
@@ -193,3 +259,8 @@ class NinaPro_Dataset(Dataset):
     def __len__(self):
         return len(self.Xs)
     
+class NinaPro_DataLoader(BaseDataLoader):
+    def __init__(self, data_dir, batch_size=64, shuffle=True, validation_split=0.1, num_workers=1, training=True):
+        self.data_dir = data_dir
+        self.dataset = NinaPro_Dataset()
+        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)

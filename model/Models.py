@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
@@ -87,3 +88,55 @@ class Fashion_AlexNet(BaseModel):
         out = F.log_softmax(out, dim=1)
 
         return out
+
+
+class NinaPro_instantaneousLeNet(BaseModel):
+    def __init__(self,in_channels=10, num_classes=52):
+        super().__init__()
+        # - fake sample.shape = [m, 1, 10]
+        sample = torch.randn(1, 1, in_channels)
+        in_channels = sample.shape[1]
+
+        # self.conv1 = nn.Conv2d(1,32,3,1)
+        self.conv1   = nn.Conv1d(in_channels,64,3,1)
+        s = self.conv1(sample)
+
+        # self.conv2 = nn.Conv2d(32,64,3,1)
+        self.conv2   = nn.Conv1d(64,256,3,1)
+        s = self.conv2(s)
+        s = F.max_pool2d(s, 2)
+
+        # self.dropout1 = nn.Dropout2d(0.25)
+        self.dropout1   = nn.Dropout(0.5)
+
+        # self.dropout2 = nn.Dropout2d(0.5)
+        self.dropout2   = nn.Dropout(0.5)
+
+        # self.fc1 = nn.Linear(9216, 128)
+        # - x.shape = (m, out_channels, d)
+        self.fc1   = nn.Linear(s.shape[1]*s.shape[2], 128) # maxpool=2, 64*3/2
+
+        # self.fc2 = nn.Linear(128, 10)
+        self.fc2   = nn.Linear(128, num_classes) # for DB1 0-12 gestures.
+
+    def forward(self, x):
+        x = x.float()
+        x = self.conv1(x)
+        x = F.relu(x)
+
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+
+        x = self.dropout1(x)
+
+        x = torch.flatten(x,1)
+        x = self.fc1(x)
+        x = F.relu(x)
+
+        x = self.dropout2(x)
+
+        x = self.fc2(x)
+
+        outputs = F.log_softmax(x, dim=1)
+        return outputs
