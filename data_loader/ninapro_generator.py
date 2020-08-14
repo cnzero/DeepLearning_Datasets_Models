@@ -1,8 +1,8 @@
 import os
 import scipy.io
 import numpy as np
-from data_preprocessing import *
-from data_augmentation import *
+from ninapro_preprocessing import *
+from ninapro_augmentation import *
 from torch.utils.data import Dataset
 
 
