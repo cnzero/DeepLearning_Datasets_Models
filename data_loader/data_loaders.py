@@ -9,6 +9,8 @@ import os
 
 # for NinaPro
 from scipy import io
+from ninapro_preprocessing import *
+from ninapro_augmentation import *
 
 
 class MNIST_DataLoader(BaseDataLoader):
@@ -249,6 +251,11 @@ class NinaPro_Dataset(Dataset):
         # for instantaneous
         self.Xs = np.reshape(self.Xs, (self.Xs.shape[0], 1, self.Xs.shape[1]))
         self.Ys = self.Ys.squeeze(1)-1
+
+        # raw EMG signal augmentation
+        
+        
+        return X_aug, Y_aug.
 
     def __getitem__(self, index):
         xs, ys = self.Xs[index, :], self.Ys[index]
