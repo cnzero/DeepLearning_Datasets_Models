@@ -1,6 +1,6 @@
 {
     "name": "NinaPro_instantaneousLeNet",
-    "n_gpu": 2,
+    "n_gpu": 1,
 
     "arch": {
         "type": "NinaPro_instantaneousLeNet",
@@ -12,14 +12,14 @@
             "data_dir": "/home/Disk2T-1/NinaPro/",
             "batch_size": 128,
             "shuffle": true,
-            "validation_split": 0.1,
+            "validation_split": 0.2,
             "num_workers": 2
         }
     },
     "optimizer": {
         "type": "Adam",
         "args":{
-            "lr": 0.001,
+            "lr": 0.01,
             "weight_decay": 0,
             "amsgrad": true
         }
@@ -36,7 +36,7 @@
         }
     },
     "trainer": {
-        "epochs": 20,
+        "epochs": 50,
 
         "save_dir": "saved/",
         "save_period": 1,

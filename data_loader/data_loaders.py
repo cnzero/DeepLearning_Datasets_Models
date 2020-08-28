@@ -9,9 +9,9 @@ import os
 
 # for NinaPro
 from scipy import io
-from ninapro_preprocessing import *
-from ninapro_augmentation import *
-
+from data_loader.ninapro_preprocessing import *
+from data_loader.ninapro_augmentation import *
+from data_loader.ts_features import get_tsfresh_features
 
 class MNIST_DataLoader(BaseDataLoader):
     """
@@ -80,6 +80,92 @@ class Fashion_DataLoader(BaseDataLoader):
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
 
+def InputOutput_instantaneous(Xs, Ys, **params):
+    # parameters are set here, rather than using transfering parameters
+    Xs = np.reshape(Xs, (Xs.shape[0], 1, Xs.shape[1]))
+    Ys = Ys.squeeze(1)
+    return Xs, Ys
+
+def InputOutput_rawImages(Xs, Ys):
+    LW = 100
+    LI = 50
+
+    N_channels = Xs.shape[1]
+    Xs = np.zeros((1, LW, N_channels))
+    Ys = np.zeros((1, 1, 1))
+    # same gesture data sliding window splition
+    for label in np.unique(Ys):
+        rawData_label = Xs[Ys==label, :]
+        Length = rawData_label.shape[0]
+        Nw = int((Length-LW)/LI + 1)
+        for w in range(Nw):
+            startIndex = w*LI
+            endIndex = startIndex + LW
+            x_window = Xs[startIndex:endIndex, :]
+            y_window = label * np.ones((1,1), dtype=int)
+
+            # numpy Xs/Ys concatenate
+            Xs = np.concatenate( (Xs, x_window.reshape(1,LW, N_channels) ), axis=0 )
+            Ys = np.concatenate( (Ys, y_window), axis=0 )
+
+    return Xs, Ys
+
+def InputOutput_features(Xs, Ys):
+    # input
+    #       [self.Xs], N x channels
+    #       [self.Ys], (N,) labels
+    # output
+    #       [self.Xs], m_samples x n_features
+    #       {self.Ys}, (m_samples, )
+    LW = 200
+    LI = 50
+    features = {
+                'absolute_sum_of_changes': None, 
+                'cid_ce': [{'normalize': False}, {'normalize': True}],
+                'kurtosis': None, 
+                'large_standard_deviation': [{'r': 0.2}, {'r': 0.8}],
+                'linear_trend': [{'attr': 'stderr'}], 
+                'maximum': None, 
+                'mean_abs_change': None, 
+                'minimum': None, 
+                'percentage_of_reoccurring_datapoints_to_all_datapoints': None, 
+                'percentage_of_reoccurring_values_to_all_values': None, 
+                'quantile': [{'q': 0.1}, {'q': 0.6}, {'q': 0.9}], 
+                'quantile': [{'q': 0.2}, {'q': 0.6}, {'q': 0.9}], 
+                'ratio_value_number_to_time_series_length': None, 
+                'sample_entropy': None, 
+                'standard_deviation': None, 
+                'sum_of_reoccurring_data_points': None, 
+                'sum_of_reoccurring_values': None, 
+                'variance': None, 
+                'variation_coefficient': None
+               }
+    # features extraction
+    N_channels = Xs.shape[1]
+
+    for i,label in enumerate(np.unique(Ys).reshape((-1,1)).tolist()):
+        # first to init Xs dimentions, which are heavily dependent on the features
+        conditions_label = Ys==label[0]
+        conditions_label = conditions_label.squeeze(1)
+        X_data = Xs[conditions_label, :]
+        # print(i, label, X_data.shape)
+        if i==0:
+            # Xs_tsfresh = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=features)
+            Xs_tsfresh = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=None)
+            Ys_tsfresh = label * np.ones(shape=(Xs_tsfresh.shape[0], 1), dtype=int)
+        else:
+            # xs = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=features)
+            xs = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=None)
+            ys = label * np.ones(shape=(xs.shape[0], 1), dtype=int)
+            # concentate
+            Xs_tsfresh = np.concatenate( (Xs_tsfresh, xs), axis=0)
+            Ys_tsfresh = np.concatenate( (Ys_tsfresh, ys), axis=0)
+
+        # print('Xs shape: ', Xs.shape,'X_data shape: ', X_data.shape)
+
+    return Xs_tsfresh, Ys_tsfresh
+
+ 
 
 class NinaPro_Dataset(Dataset):
     def __init__(self, data_dir='/home/Disk2T-1/NinaPro/', promoteInfo=True,
@@ -93,6 +179,9 @@ class NinaPro_Dataset(Dataset):
                  transform=None,
                  preprocessing_functions={'low_pass_filter':'params', 'high_pass_filter':'params'},
                  augmentation_functions= {'rotate':'params'},
+                #  InputOutput_function=InputOutput_instantaneous,
+                 InputOutput_function=InputOutput_features,
+                 InputOutput_params = 'None',
                  size_factor=1):
         
         # print promotion informations
@@ -245,17 +334,29 @@ class NinaPro_Dataset(Dataset):
         # - type-1 raw instaneous data
         conditionNotRest = self.restimulus!=0
         conditions = conditionRepeatIndex * conditionNotRest
-        self.Xs =        self.emg[conditions[:, 0], :] # N x N_channels
-        self.Ys = self.restimulus[conditions[:, 0], :] # (N, )
+        self.Xs =        self.emg[conditions[:, 0], :]    # N x N_channels
+        self.Ys = self.restimulus[conditions[:, 0], :] -1 # (N, )
+        #TODO
+        ### label squeeze and selection
+        ### re-arrange labels or one-hot encoding
 
-        # for instantaneous
-        self.Xs = np.reshape(self.Xs, (self.Xs.shape[0], 1, self.Xs.shape[1]))
-        self.Ys = self.Ys.squeeze(1)-1
+        # pre-processing for raw sEMG signals
+        # augmentation   for raw sEMG signals
 
-        # raw EMG signal augmentation
-        
-        
-        return X_aug, Y_aug.
+        # how to feed for the Models
+        self.Xs, self.Ys = InputOutput_function(self.Xs, self.Ys)
+        ### type-1: instantaneous raw sEMG signals
+        #NOTE
+        # self.Xs, self.Ys = self.InputOutput_instantaneous()
+
+        ### type-2: raw sEMG images with LW/LI
+        #NOTE
+        # self.Xs, self.Ys = self.InputOutput_rawImages()
+
+        ### type-3: features extraction from raw sEMG signals with LW/LI
+        #NOTE
+        # self.Xs, self.Ys = InputOutput_features(self.Xs, self.Ys)
+
 
     def __getitem__(self, index):
         xs, ys = self.Xs[index, :], self.Ys[index]
@@ -265,7 +366,11 @@ class NinaPro_Dataset(Dataset):
 
     def __len__(self):
         return len(self.Xs)
-    
+
+
+
+
+   
 class NinaPro_DataLoader(BaseDataLoader):
     def __init__(self, data_dir, batch_size=64, shuffle=True, validation_split=0.1, num_workers=1, training=True):
         self.data_dir = data_dir
