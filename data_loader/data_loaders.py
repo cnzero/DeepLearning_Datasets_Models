@@ -179,12 +179,13 @@ class NinaPro_Dataset(Dataset):
                  emg_channels=[0,1,2,3],
                  normalize=None,
                  transform=None,
-                 preprocessing_functions={low_pass_filter: {'f':1, 'fs':100}, \
+                 preprocessing_functions={'low_pass_filter': {'f':1, 'fs':100}, \
                                         #   high_pass_filter:{'f':3, 'fs':100}, \
                                          },
-                 augmentation_functions= {'rotate':{'rotation':2, 'mask':None}, \
+                 augmentation_functions= {'scale':{'sigma':0.2},\
+                                        #   rotate:{'rotation':2, 'mask':None}, \
                                          },
-                 InputOutput_function=InputOutput_instantaneous,
+                 InputOutput_function='InputOutput_instantaneous',
                 #  InputOutput_function=InputOutput_features,
                  InputOutput_params = {'LW':200, 'LI':50, \
                                        'features':{'maximum':None, \
@@ -331,11 +332,23 @@ class NinaPro_Dataset(Dataset):
 
         # raw signal preprocessing before any further split and extraction
         if self.preprocessing_functions is not None:
-            for func, param in zip(preprocessing_functions.keys(), preprocessing_functions.values()):
-                self.emg =   func(self.emg, param)
+            for func, params in zip(self.preprocessing_functions.keys(), self.preprocessing_functions.values()):
+                self.emg =   eval(func)(self.emg, params)
         # split for different train-test datasets based on [self.trainRepeatIndex]
         conditionRepeatIndex = np.empty_like(self.rerepetition)
         if self.train:
+            x = self.emg
+            y = self.restimulus
+            r = self.rerepetition
+            # raw sEMG signal data augmentation for train datasets
+            for _ in range(self.size_factor):
+                print('DEBUG: ', self.emg.shape)
+                for func, params in self.augmentation_functions.items():
+                    self.emg = np.concatenate((self.emg, eval(func)(x, params) ), axis=0)
+                    self.restimulus = np.concatenate((self.restimulus, y), axis=0)
+                    self.rerepetition = np.concatenate((self.rerepetition, r), axis=0)
+            assert self.emg.shape[0]==self.restimulus.shape[0]==self.rerepetition.shape[0], \
+                print('augmentation concatenate wrong!!!')
             conditionRepeatIndex = np.any(self.rerepetition==self.trainRepeatIndex, axis=1)
         else:
             testRepetitionIndex = []
@@ -345,7 +358,6 @@ class NinaPro_Dataset(Dataset):
             conditionRepeatIndex = np.any(self.rerepetition==testRepetitionIndex, axis=1)
         conditionRepeatIndex = conditionRepeatIndex.reshape((-1, 1)) 
         
-        # - type-1 raw instaneous data
         conditionNotRest = self.restimulus!=0
         conditions = conditionRepeatIndex * conditionNotRest
         self.Xs =        self.emg[conditions[:, 0], :]    # N x N_channels
@@ -354,18 +366,8 @@ class NinaPro_Dataset(Dataset):
         ### label squeeze and selection
         ### re-arrange labels or one-hot encoding
 
-        # pre-processing for raw sEMG signals
-        if preprocessing_functions is not None:
-            # preprocess every channel
-            pass
-        if self.train:
-        # augmentation   for raw sEMG signals
-            pass
-        else:
-            # for test part, signals can not be augmented.
-            pass 
         # how to feed for the Models
-        self.Xs, self.Ys = InputOutput_function(self.Xs, self.Ys, InputOutput_params)
+        self.Xs, self.Ys = eval(InputOutput_function)(self.Xs, self.Ys, InputOutput_params)
 
 
     def __getitem__(self, index):

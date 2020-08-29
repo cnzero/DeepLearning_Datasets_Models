@@ -40,7 +40,8 @@ def jitter(x, snr_db=25):
     return xn
 
 
-def scale(x, sigma=0.2):
+def scale(x, params={'sigma':0.2}):
+    sigma = params['sigma']
     '''Multiply signal with random scalar from normal distribution N(1,sigma).'''
     a = np.random.normal(size=x.shape[1], scale=sigma, loc=1.0)
     output = a * x
