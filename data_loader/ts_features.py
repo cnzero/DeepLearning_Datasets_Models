@@ -11,10 +11,7 @@ def RMS(X, param):
 def get_tsfresh_features(X=None, \
                          LW=10, \
                          LI=5, \
-                         features_Parameters={'abs_energy':None, \
-                                              'absolute_sum_of_changes':None, \
-                                              'has_duplicate':None, \
-                                              'count_below_mean':None}):
+                         features=None):
     assert LI>0, 'Wrong::LI should larger than 0!!!'
     X = np.asarray(X)
     X_Rows = X.shape[0]
@@ -31,6 +28,6 @@ def get_tsfresh_features(X=None, \
     X2tsfresh = pd.DataFrame(X[X2tsfresh_index])
     X2tsfresh['id'] = X2tsfresh_id
     # Xfeature = tsfresh_Feature_Extract(X2tsfresh, column_id='id', default_fc_parameters=features_Parameters)
-    Xfeature = tsfresh_Feature_Extract(X2tsfresh, column_id='id', default_fc_parameters=None)
+    Xfeature = tsfresh_Feature_Extract(X2tsfresh, column_id='id', default_fc_parameters=features)
 
     return np.asarray(Xfeature)

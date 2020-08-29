@@ -9,8 +9,8 @@ import os
 
 # for NinaPro
 from scipy import io
-from data_loader.ninapro_preprocessing import *
-from data_loader.ninapro_augmentation import *
+from data_loader.ninapro_preprocessing import low_pass_filter, high_pass_filter
+from data_loader.ninapro_augmentation import jitter, scale, rotate, mag_warp, time_warp, permute
 from data_loader.ts_features import get_tsfresh_features
 
 class MNIST_DataLoader(BaseDataLoader):
@@ -80,13 +80,13 @@ class Fashion_DataLoader(BaseDataLoader):
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
 
-def InputOutput_instantaneous(Xs, Ys, **params):
+def InputOutput_instantaneous(Xs, Ys, params):
     # parameters are set here, rather than using transfering parameters
     Xs = np.reshape(Xs, (Xs.shape[0], 1, Xs.shape[1]))
     Ys = Ys.squeeze(1)
     return Xs, Ys
 
-def InputOutput_rawImages(Xs, Ys):
+def InputOutput_rawImages(Xs, Ys, params):
     LW = 100
     LI = 50
 
@@ -110,36 +110,38 @@ def InputOutput_rawImages(Xs, Ys):
 
     return Xs, Ys
 
-def InputOutput_features(Xs, Ys):
+def InputOutput_features(Xs, Ys, params):
+    print('InputOutput params', params)
     # input
     #       [self.Xs], N x channels
     #       [self.Ys], (N,) labels
     # output
     #       [self.Xs], m_samples x n_features
     #       {self.Ys}, (m_samples, )
-    LW = 200
-    LI = 50
-    features = {
-                'absolute_sum_of_changes': None, 
-                'cid_ce': [{'normalize': False}, {'normalize': True}],
-                'kurtosis': None, 
-                'large_standard_deviation': [{'r': 0.2}, {'r': 0.8}],
-                'linear_trend': [{'attr': 'stderr'}], 
-                'maximum': None, 
-                'mean_abs_change': None, 
-                'minimum': None, 
-                'percentage_of_reoccurring_datapoints_to_all_datapoints': None, 
-                'percentage_of_reoccurring_values_to_all_values': None, 
-                'quantile': [{'q': 0.1}, {'q': 0.6}, {'q': 0.9}], 
-                'quantile': [{'q': 0.2}, {'q': 0.6}, {'q': 0.9}], 
-                'ratio_value_number_to_time_series_length': None, 
-                'sample_entropy': None, 
-                'standard_deviation': None, 
-                'sum_of_reoccurring_data_points': None, 
-                'sum_of_reoccurring_values': None, 
-                'variance': None, 
-                'variation_coefficient': None
-               }
+    LW = params['LW']
+    LI = params['LI']
+    features = params['features']
+    # features = {
+    #             'absolute_sum_of_changes': None, 
+    #             'cid_ce': [{'normalize': False}, {'normalize': True}],
+    #             'kurtosis': None, 
+    #             'large_standard_deviation': [{'r': 0.2}, {'r': 0.8}],
+    #             'linear_trend': [{'attr': 'stderr'}], 
+    #             'maximum': None, 
+    #             'mean_abs_change': None, 
+    #             'minimum': None, 
+    #             'percentage_of_reoccurring_datapoints_to_all_datapoints': None, 
+    #             'percentage_of_reoccurring_values_to_all_values': None, 
+    #             'quantile': [{'q': 0.1}, {'q': 0.6}, {'q': 0.9}], 
+    #             'quantile': [{'q': 0.2}, {'q': 0.6}, {'q': 0.9}], 
+    #             'ratio_value_number_to_time_series_length': None, 
+    #             'sample_entropy': None, 
+    #             'standard_deviation': None, 
+    #             'sum_of_reoccurring_data_points': None, 
+    #             'sum_of_reoccurring_values': None, 
+    #             'variance': None, 
+    #             'variation_coefficient': None
+    #            }
     # features extraction
     N_channels = Xs.shape[1]
 
@@ -151,11 +153,11 @@ def InputOutput_features(Xs, Ys):
         # print(i, label, X_data.shape)
         if i==0:
             # Xs_tsfresh = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=features)
-            Xs_tsfresh = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=None)
+            Xs_tsfresh = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features=features)
             Ys_tsfresh = label * np.ones(shape=(Xs_tsfresh.shape[0], 1), dtype=int)
         else:
             # xs = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=features)
-            xs = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features_Parameters=None)
+            xs = get_tsfresh_features(X=X_data, LW=LW, LI=LI, features=features)
             ys = label * np.ones(shape=(xs.shape[0], 1), dtype=int)
             # concentate
             Xs_tsfresh = np.concatenate( (Xs_tsfresh, xs), axis=0)
@@ -177,11 +179,19 @@ class NinaPro_Dataset(Dataset):
                  emg_channels=[0,1,2,3],
                  normalize=None,
                  transform=None,
-                 preprocessing_functions={'low_pass_filter':'params', 'high_pass_filter':'params'},
-                 augmentation_functions= {'rotate':'params'},
-                #  InputOutput_function=InputOutput_instantaneous,
-                 InputOutput_function=InputOutput_features,
-                 InputOutput_params = 'None',
+                 preprocessing_functions={low_pass_filter: {'f':1, 'fs':100}, \
+                                        #   high_pass_filter:{'f':3, 'fs':100}, \
+                                         },
+                 augmentation_functions= {'rotate':{'rotation':2, 'mask':None}, \
+                                         },
+                 InputOutput_function=InputOutput_instantaneous,
+                #  InputOutput_function=InputOutput_features,
+                 InputOutput_params = {'LW':200, 'LI':50, \
+                                       'features':{'maximum':None, \
+                                                   'minimum':None, \
+                                                   'variance':None,
+                                                   }
+                                       },
                  size_factor=1):
         
         # print promotion informations
@@ -319,6 +329,10 @@ class NinaPro_Dataset(Dataset):
                 if self.reobject is not None and 'reobject' in mat.keys():
                     self.reobject = np.vstack((self.reobject, mat['reobject']))
 
+        # raw signal preprocessing before any further split and extraction
+        if self.preprocessing_functions is not None:
+            for func, param in zip(preprocessing_functions.keys(), preprocessing_functions.values()):
+                self.emg =   func(self.emg, param)
         # split for different train-test datasets based on [self.trainRepeatIndex]
         conditionRepeatIndex = np.empty_like(self.rerepetition)
         if self.train:
@@ -341,21 +355,17 @@ class NinaPro_Dataset(Dataset):
         ### re-arrange labels or one-hot encoding
 
         # pre-processing for raw sEMG signals
+        if preprocessing_functions is not None:
+            # preprocess every channel
+            pass
+        if self.train:
         # augmentation   for raw sEMG signals
-
+            pass
+        else:
+            # for test part, signals can not be augmented.
+            pass 
         # how to feed for the Models
-        self.Xs, self.Ys = InputOutput_function(self.Xs, self.Ys)
-        ### type-1: instantaneous raw sEMG signals
-        #NOTE
-        # self.Xs, self.Ys = self.InputOutput_instantaneous()
-
-        ### type-2: raw sEMG images with LW/LI
-        #NOTE
-        # self.Xs, self.Ys = self.InputOutput_rawImages()
-
-        ### type-3: features extraction from raw sEMG signals with LW/LI
-        #NOTE
-        # self.Xs, self.Ys = InputOutput_features(self.Xs, self.Ys)
+        self.Xs, self.Ys = InputOutput_function(self.Xs, self.Ys, InputOutput_params)
 
 
     def __getitem__(self, index):
