@@ -1,7 +1,9 @@
 from PIL import Image
+import torch
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 from torchvision.datasets.mnist import FashionMNIST
+from torchvision import transforms
 from base import BaseDataLoader
 import numpy as np
 import pandas as pd
@@ -38,7 +40,7 @@ class Fashion_Dataset(Dataset):
         
         self.fashion = list(data.values)
         ### --- debug
-        print('debug', len(self.fashion), len(self.fashion[0]))
+        # print('debug', len(self.fashion), len(self.fashion[0]))
         self.transform = transform
 
         label, image = [], []
@@ -86,16 +88,16 @@ def InputOutput_instantaneous(Xs, Ys, params):
     Ys = Ys.squeeze(1)
     return Xs, Ys
 
-def InputOutput_rawImages(Xs, Ys, params):
-    LW = 100
-    LI = 50
+def InputOutput_rawImages(Xs, Ys, params={'LW':30, 'LI':10}):
+    LW = params['LW']
+    LI = params['LI']
 
     N_channels = Xs.shape[1]
-    Xs = np.zeros((1, LW, N_channels))
-    Ys = np.zeros((1, 1, 1))
+    xs = np.zeros((1, 1, LW, N_channels))
+    ys = np.zeros((1, 1))
     # same gesture data sliding window splition
     for label in np.unique(Ys):
-        rawData_label = Xs[Ys==label, :]
+        rawData_label = Xs[Ys.squeeze(1)==label, :]
         Length = rawData_label.shape[0]
         Nw = int((Length-LW)/LI + 1)
         for w in range(Nw):
@@ -105,10 +107,34 @@ def InputOutput_rawImages(Xs, Ys, params):
             y_window = label * np.ones((1,1), dtype=int)
 
             # numpy Xs/Ys concatenate
-            Xs = np.concatenate( (Xs, x_window.reshape(1,LW, N_channels) ), axis=0 )
-            Ys = np.concatenate( (Ys, y_window), axis=0 )
+            xs = np.concatenate( (xs, x_window.reshape(1,1,LW, N_channels) ), axis=0 )
+            ys = np.concatenate( (ys, y_window), axis=0 )
 
-    return Xs, Ys
+    return xs[1:, :, :], ys[1:, :].squeeze(1)
+
+def InputOutput_TCNseq(Xs, Ys, params={'LW':200, 'LI':100}):
+    LW = params['LW']
+    LI = params['LI']
+
+    N_channels = Xs.shape[1]
+    xs = np.zeros((1, LW, N_channels))
+    ys = np.zeros((1, 1))
+    # same gesture data sliding window splition
+    for label in np.unique(Ys):
+        rawData_label = Xs[Ys.squeeze(1)==label, :]
+        Length = rawData_label.shape[0]
+        Nw = int((Length-LW)/LI + 1)
+        for w in range(Nw):
+            startIndex = w*LI
+            endIndex = startIndex + LW
+            x_window = Xs[startIndex:endIndex, :]
+            y_window = label * np.ones((1,1), dtype=int)
+
+            # numpy Xs/Ys concatenate
+            xs = np.concatenate( (xs, x_window.reshape(1,LW, N_channels) ), axis=0 )
+            ys = np.concatenate( (ys, y_window), axis=0 )
+
+    return xs[1:, :, :], ys[1:, :].squeeze(1)
 
 def InputOutput_features(Xs, Ys, params):
     print('InputOutput params', params)
@@ -173,27 +199,32 @@ class NinaPro_Dataset(Dataset):
     def __init__(self, data_dir='/home/Disk2T-1/NinaPro/', promoteInfo=True,
                  DB = 1,
                  train=True,
-                 trainRepeatIndex=[0,1,2,3,4,5,6,8,9], 
+                 trainRepeatIndex=[0,1,3,4,6,8,9], 
                  classes=list(range(1, 53)), 
                  subject=1,
                  emg_channels=[0,1,2,3],
                  normalize=None,
                  transform=None,
-                 preprocessing_functions={'low_pass_filter': {'f':1, 'fs':100}, \
-                                        #   high_pass_filter:{'f':3, 'fs':100}, \
+                 preprocessing_functions={ \
+                                        #   'low_pass_filter': {'f':1, 'fs':100}, \
+                                        #   'high_pass_filter':{'f':3, 'fs':100}, \
                                          },
-                 augmentation_functions= {'scale':{'sigma':0.2},\
-                                        #   rotate:{'rotation':2, 'mask':None}, \
+                 augmentation_functions= {\
+                                        #   'scale':{'sigma':0.2},\
+                                        #   'rotate':{'rotation':2, 'mask':None}, \
                                          },
-                 InputOutput_function='InputOutput_instantaneous',
+                #  InputOutput_function='InputOutput_instantaneous',
+                 InputOutput_function='InputOutput_rawImages', 
+                 InputOutput_params={'LW':30, 'LI':10},
+                #  InputOutput_function='InputOutput_TCNseq',
                 #  InputOutput_function=InputOutput_features,
-                 InputOutput_params = {'LW':200, 'LI':50, \
-                                       'features':{'maximum':None, \
-                                                   'minimum':None, \
-                                                   'variance':None,
-                                                   }
-                                       },
-                 size_factor=1):
+                #  InputOutput_params = {'LW':200, 'LI':100, \
+                #                        'features':{'maximum':None, \
+                #                                    'minimum':None, \
+                #                                    'variance':None,
+                #                                    }
+                #                        },
+                 size_factor=0):
         
         # print promotion informations
         if promoteInfo:
@@ -342,8 +373,8 @@ class NinaPro_Dataset(Dataset):
             r = self.rerepetition
             # raw sEMG signal data augmentation for train datasets
             for _ in range(self.size_factor):
-                print('DEBUG: ', self.emg.shape)
-                for func, params in self.augmentation_functions.items():
+                # print('DEBUG: ', self.emg.shape)
+                for func, params in zip(self.augmentation_functions.keys(), self.augmentation_functions.values()):
                     self.emg = np.concatenate((self.emg, eval(func)(x, params) ), axis=0)
                     self.restimulus = np.concatenate((self.restimulus, y), axis=0)
                     self.rerepetition = np.concatenate((self.rerepetition, r), axis=0)
@@ -374,6 +405,7 @@ class NinaPro_Dataset(Dataset):
         xs, ys = self.Xs[index, :], self.Ys[index]
         if self.transform is not None:
             xs = self.transform(xs)
+        # return torch.from_numpy(xs), torch.from_numpy(ys)
         return xs, ys
 
     def __len__(self):

@@ -48,8 +48,10 @@ def scale(x, params={'sigma':0.2}):
     return output
 
 
-def rotate(x, rotation=2, mask=None):
+def rotate(x, params={'rotation':2, 'mask':None}):
     '''Rotate signal channels randomly between [0,2] positions. Use mask to disable rotation of specific channels'''
+    rotation = params['rotation']
+    mask = params['mask']
     output = np.zeros(x.shape)
     r = np.random.randint(-rotation, rotation + 1, size=1)[0]
     if mask is None:

@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch import dtype
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
@@ -39,8 +40,15 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.data_loader):
+            # data, target = data.to(self.device, dtype=torch.float), target.to(self.device, dtype=torch.float)
+            
+            data = data.type(torch.FloatTensor)
+            target = target.type(torch.LongTensor)
             data, target = data.to(self.device), target.to(self.device)
 
+            # RunTimeError: Expected object of scalar type Long, 
+            # but got scalar type Float for argument # target
+            # target = target.long()
             self.optimizer.zero_grad()
             output = self.model(data)
             loss = self.criterion(output, target)
@@ -82,6 +90,10 @@ class Trainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
+                data, target = data.to(self.device), target.to(self.device)
+
+                data = data.type(torch.FloatTensor)
+                target = target.type(torch.LongTensor)
                 data, target = data.to(self.device), target.to(self.device)
 
                 output = self.model(data)
